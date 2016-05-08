@@ -11,7 +11,7 @@
 //! a loaded mesh will contain `[x, y, z, x, y, z, ...]` which you can then use however you like.
 //! Indices are also loaded and may re-use vertices already existing in the mesh, this data is
 //! stored in the `indices` member.
-//! 
+//!
 //! Standard MTL attributes are supported as well and any unrecognized parameters will be stored in a
 //! HashMap containing the key-value pairs of the unrecognized parameter and its value.
 //!
@@ -20,7 +20,7 @@
 //! print out its attributes. This example is a slightly trimmed down version of `print_model_info`
 //! and `print_material_info` combined together, see them for a version that also prints out
 //! normals and texture coordinates if the model has them.
-//! 
+//!
 //! ```
 //! use std::path::Path;
 //! use tobj;
@@ -35,13 +35,13 @@
 //! 	let mesh = &m.mesh;
 //! 	println!("model[{}].name = \'{}\'", i, m.name);
 //! 	println!("model[{}].mesh.material_id = {:?}", i, mesh.material_id);
-//! 
+//!
 //! 	println!("Size of model[{}].indices: {}", i, mesh.indices.len());
 //! 	for f in 0..mesh.indices.len() / 3 {
 //! 		println!("    idx[{}] = {}, {}, {}.", f, mesh.indices[3 * f],
 //! 			mesh.indices[3 * f + 1], mesh.indices[3 * f + 2]);
 //! 	}
-//! 
+//!
 //! 	// Normals and texture coordinates are also loaded, but not printed in this example
 //! 	println!("model[{}].vertices: {}", i, mesh.positions.len() / 3);
 //! 	assert!(mesh.positions.len() % 3 == 0);
@@ -67,17 +67,17 @@
 //! 	}
 //! }
 //! ```
-//! 
+//!
 //! # Rendering Examples
 //! For an example of integration with [glium](https://github.com/tomaka/glium) to make a simple OBJ viewer,
 //! check out [tobj viewer](https://github.com/Twinklebear/tobj_viewer). Some sample images can be found in
-//! tobj viewer's readme or in [this gallery](http://imgur.com/a/xsg6v). 
+//! tobj viewer's readme or in [this gallery](http://imgur.com/a/xsg6v).
 //!
 //! The Rungholt model shown below is reasonably large (6.7M triangles, 12.3M vertices) and is loaded
 //! in ~7.47s using a peak of ~1.1GB of memory on a Windows 10 machine with an i7-4790k and 16GB of
 //! 1600Mhz DDR3 RAM with tobj 0.1.1 on rustc 1.6.0.
 //! The model can be found on [Morgan McGuire's](http://graphics.cs.williams.edu/data/meshes.xml) meshes page and
-//! was originally built by kescha. Future work will focus on improving performance and memory usage. 
+//! was originally built by kescha. Future work will focus on improving performance and memory usage.
 //!
 //! <img src="http://i.imgur.com/wImyNG4.png" alt="Rungholt"
 //!     style="display:block; max-width:100%; height:auto">
@@ -87,7 +87,7 @@
 //! The Stanford Buddha and Dragon from the
 //! [Stanford 3D Scanning Repository](http://graphics.stanford.edu/data/3Dscanrep/) both load quite quickly.
 //! The Rust logo model was made by
-//! [Nylithius on BlenderArtists](http://blenderartists.org/forum/showthread.php?362836-Rust-language-3D-logo). 
+//! [Nylithius on BlenderArtists](http://blenderartists.org/forum/showthread.php?362836-Rust-language-3D-logo).
 //! The materials used are from the [MERL BRDF Database](http://www.merl.com/brdf/).
 //!
 //! <img src="http://i.imgur.com/E1ylrZW.png" alt="Rust logo with friends"
@@ -162,19 +162,19 @@ pub struct Mesh {
     pub indices: Vec<u32>,
     /// Optional material id associated with this mesh. The material id indexes into the Vec of
     /// Materials loaded from the associated MTL file
-    pub material_id: Option<usize>,
+    pub material_id: Vec<Option<usize>>,
 }
 
 impl Mesh {
     /// Create a new mesh specifying the geometry for the mesh
-    pub fn new(pos: Vec<f32>, norm: Vec<f32>, tex: Vec<f32>, indices: Vec<u32>, material_id: Option<usize>)
+    pub fn new(pos: Vec<f32>, norm: Vec<f32>, tex: Vec<f32>, indices: Vec<u32>, material_id: Vec<Option<usize>>)
 		-> Mesh {
         Mesh { positions: pos, normals: norm, texcoords: tex, indices: indices, material_id: material_id }
     }
     /// Create a new empty mesh
     pub fn empty() -> Mesh {
         Mesh { positions: Vec::new(), normals: Vec::new(), texcoords: Vec::new(), indices: Vec::new(),
-               material_id: None }
+               material_id: Vec::new() }
     }
 }
 
@@ -314,9 +314,9 @@ impl VertexIndices {
 /// Enum representing either a quad or triangle face, storing indices for the face vertices
 #[derive(Debug)]
 enum Face {
-    Triangle(VertexIndices, VertexIndices, VertexIndices),
-    Quad(VertexIndices, VertexIndices, VertexIndices, VertexIndices),
-    Polygon(Vec<VertexIndices>),
+    Triangle(VertexIndices, VertexIndices, VertexIndices, Option<usize>),
+    Quad(VertexIndices, VertexIndices, VertexIndices, VertexIndices, Option<usize>),
+    Polygon(Vec<VertexIndices>, Option<usize>),
 }
 
 /// Parse the floatn information from the words, words is an iterator over the float strings
@@ -352,7 +352,7 @@ fn parse_float3(val_str: SplitWhitespace, vals: &mut [f32; 3]) -> bool {
 /// positions, texcoords and normals is required
 /// returns false if an error occured parsing the face
 fn parse_face(face_str: SplitWhitespace, faces: &mut Vec<Face>, pos_sz: usize, tex_sz: usize,
-                  norm_sz: usize) -> bool {
+                  norm_sz: usize, mat: Option<usize>) -> bool {
     let mut indices = Vec::new();
     for f in face_str {
         match VertexIndices::parse(f, pos_sz, tex_sz, norm_sz) {
@@ -362,9 +362,9 @@ fn parse_face(face_str: SplitWhitespace, faces: &mut Vec<Face>, pos_sz: usize, t
     }
     // Check if we read a triangle or a quad face and push it on
     match indices.len() {
-        3 => faces.push(Face::Triangle(indices[0], indices[1], indices[2])),
-        4 => faces.push(Face::Quad(indices[0], indices[1], indices[2], indices[3])),
-        _ => faces.push(Face::Polygon(indices)),
+        3 => faces.push(Face::Triangle(indices[0], indices[1], indices[2], mat)),
+        4 => faces.push(Face::Quad(indices[0], indices[1], indices[2], indices[3], mat)),
+        _ => faces.push(Face::Polygon(indices, mat)),
     }
     true
 }
@@ -372,7 +372,7 @@ fn parse_face(face_str: SplitWhitespace, faces: &mut Vec<Face>, pos_sz: usize, t
 /// Add a vertex to a mesh by either re-using an existing index (eg. it's in the index_map)
 /// or appending the position, texcoord and normal as appropriate and creating a new vertex
 fn add_vertex(mesh: &mut Mesh, index_map: &mut HashMap<VertexIndices, u32>, vert: &VertexIndices,
-              pos: &[f32], texcoord: &[f32], normal: &[f32]) {
+              pos: &[f32], texcoord: &[f32], normal: &[f32], mat_id: Option<usize>) {
     match index_map.get(vert) {
         Some(&i) => mesh.indices.push(i),
         None => {
@@ -397,39 +397,39 @@ fn add_vertex(mesh: &mut Mesh, index_map: &mut HashMap<VertexIndices, u32>, vert
             index_map.insert(*vert, next);
         }
     }
+    mesh.material_id.push(mat_id);
 }
 
 /// Export a list of faces to a mesh and return it, converting quads to tris
-fn export_faces(pos: &[f32], texcoord: &[f32], normal: &[f32], faces: &[Face],
-				mat_id: Option<usize>) -> Mesh {
+fn export_faces(pos: &[f32], texcoord: &[f32], normal: &[f32], faces: &[Face]) -> Mesh {
     let mut index_map = HashMap::new();
     let mut mesh = Mesh::empty();
-    mesh.material_id = mat_id;
+    // mesh.material_id = mat_id;
     for f in faces {
         // Optimized paths for Triangles and Quads, Polygon handles the general case of an unknown
         // length triangle fan
         match *f {
-            Face::Triangle(ref a, ref b, ref c) => {
-                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal);
+            Face::Triangle(ref a, ref b, ref c, mat_id) => {
+                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal, mat_id);
             },
-            Face::Quad(ref a, ref b, ref c, ref d) => {
-                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal);
+            Face::Quad(ref a, ref b, ref c, ref d, mat_id) => {
+                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal, mat_id);
 
-                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal);
-                add_vertex(&mut mesh, &mut index_map, d, pos, texcoord, normal);
+                add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal, mat_id);
+                add_vertex(&mut mesh, &mut index_map, d, pos, texcoord, normal, mat_id);
             },
-            Face::Polygon(ref indices) => {
+            Face::Polygon(ref indices, mat_id) => {
                 let a = &indices[0];
                 let mut b = &indices[1];
                 for c in indices.iter().skip(2) {
-                    add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal);
-                    add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal);
-                    add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal);
+                    add_vertex(&mut mesh, &mut index_map, a, pos, texcoord, normal, mat_id);
+                    add_vertex(&mut mesh, &mut index_map, b, pos, texcoord, normal, mat_id);
+                    add_vertex(&mut mesh, &mut index_map, c, pos, texcoord, normal, mat_id);
                     b = c;
                 }
             },
@@ -509,7 +509,7 @@ fn load_obj_buf<B: BufRead>(reader: &mut B, base_path: Option<&Path>) -> LoadRes
             },
             Some("f") => {
                 if !parse_face(words, &mut tmp_faces, tmp_pos.len() / 3, tmp_texcoord.len() / 2,
-							   tmp_normal.len() / 3) {
+							   tmp_normal.len() / 3, mat_id) {
                    return Err(LoadError::FaceParseError);
                 }
             },
@@ -520,7 +520,7 @@ fn load_obj_buf<B: BufRead>(reader: &mut B, base_path: Option<&Path>) -> LoadRes
                 // signals the end of the current one, so push it onto our list of objects
                 if !name.is_empty() && !tmp_faces.is_empty() {
                     models.push(Model::new(export_faces(&tmp_pos, &tmp_texcoord, &tmp_normal,
-                                                        &tmp_faces, mat_id), name));
+                                                        &tmp_faces), name));
                     tmp_faces.clear();
                 }
                 name = line[1..].trim().to_owned();
@@ -553,7 +553,10 @@ fn load_obj_buf<B: BufRead>(reader: &mut B, base_path: Option<&Path>) -> LoadRes
             Some("usemtl") => {
                 if let Some(mat_name) = words.next() {
                     match mat_map.get(mat_name) {
-                        Some(m) => mat_id = Some(*m),
+                        Some(m) => {
+                            mat_id = Some(*m);
+                            println!("Using material {}", mat_name);
+                        },
                         None => {
                             mat_id = None;
                             println!("Warning: Object {} refers to unfound material: {}", name, mat_name);
@@ -570,7 +573,7 @@ fn load_obj_buf<B: BufRead>(reader: &mut B, base_path: Option<&Path>) -> LoadRes
     // For the last object in the file we won't encounter another object name to tell us when it's
     // done, so if we're parsing an object push the last one on the list as well
     if !name.is_empty() {
-        models.push(Model::new(export_faces(&tmp_pos, &tmp_texcoord, &tmp_normal, &tmp_faces, mat_id), name));
+        models.push(Model::new(export_faces(&tmp_pos, &tmp_texcoord, &tmp_normal, &tmp_faces), name));
     }
     Ok((models, materials))
 }
